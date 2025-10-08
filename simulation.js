@@ -97,6 +97,7 @@ class Customer {
         this.wantsWidget = false;
         this.inQueue = false;
         this.queuePosition = -1;
+        this.queueJoinTime = null;
         this.hasPurchased = false;
         this.isLeaving = false;
         this.purchaseTimer = 0;
@@ -137,7 +138,7 @@ class Customer {
             this.moveToQueuePosition(deltaTime);
             
             // Check if at front of queue
-            const queueIndex = customers.filter(c => c.inQueue && c.id < this.id).length;
+            const queueIndex = customers.filter(c => c.inQueue && c.queueJoinTime < this.queueJoinTime).length;
             if (queueIndex === 0 && !this.hasPurchased) {
                 // At front of queue, start purchase timer
                 this.purchaseTimer += deltaTime * 1000;
@@ -266,6 +267,7 @@ class Customer {
         if (distance < 5) {
             // Reached queue position
             this.inQueue = true;
+            this.queueJoinTime = performance.now(); // Track when customer joined queue
             this.x = this.targetX;
             this.y = this.targetY;
             this.updateQueuePositions();
@@ -313,8 +315,8 @@ class Customer {
     }
     
     moveToQueuePosition(deltaTime) {
-        // Update queue position based on position in line
-        const queueIndex = customers.filter(c => c.inQueue && c.id < this.id).length;
+        // Update queue position based on position in line (by join time, not ID)
+        const queueIndex = customers.filter(c => c.inQueue && c.queueJoinTime < this.queueJoinTime).length;
         const targetY = widgetCounter.getBottomY() + CONFIG.queueSpacing * (queueIndex + 1);
         
         // Smoothly move to correct position in queue
