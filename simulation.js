@@ -19,6 +19,8 @@ const CONFIG = {
     counterY: 40,
     exitWidth: 100,
     exitHeight: 40,
+    entranceWidth: 100,
+    entranceHeight: 40,
     purchaseTime: 2000 // ms to complete purchase
 };
 
@@ -89,6 +91,37 @@ const exit = {
     }
 };
 
+// Entrance
+const entrance = {
+    x: (CONFIG.canvasWidth - CONFIG.entranceWidth) / 2,
+    y: 0,
+    width: CONFIG.entranceWidth,
+    height: CONFIG.entranceHeight,
+    
+    draw() {
+        ctx.fillStyle = '#4169E1';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.strokeStyle = '#1E3A8A';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+        
+        // Entrance label
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('ENTRANCE', this.x + this.width / 2, this.y + this.height / 2);
+    },
+    
+    getCenterX() {
+        return this.x + this.width / 2;
+    },
+    
+    getCenterY() {
+        return this.y + this.height / 2;
+    }
+};
+
 // Customer class
 class Customer {
     constructor(id) {
@@ -102,9 +135,9 @@ class Customer {
         this.purchaseTimer = 0;
         this.atExit = false;
         
-        // Start just above the exit (entering from the exit)
-        this.x = exit.getCenterX();
-        this.y = exit.y - this.radius - 5; // Just above the exit
+        // Start just below the entrance (entering from the entrance)
+        this.x = entrance.getCenterX();
+        this.y = entrance.y + entrance.height + this.radius + 5; // Just below the entrance
         
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
@@ -202,12 +235,12 @@ class Customer {
             }
         }
         
-        // Check exit collision
-        if (this.collidesWithExit()) {
+        // Check entrance collision
+        if (this.collidesWithEntrance()) {
             this.x -= this.vx * deltaTime;
             this.y -= this.vy * deltaTime;
             
-            // Bounce off exit
+            // Bounce off entrance
             if (Math.abs(this.vx) > Math.abs(this.vy)) {
                 this.vx = -this.vx;
             } else {
@@ -221,6 +254,29 @@ class Customer {
                 if (this.collidesWith(other)) {
                     this.resolveCollision(other);
                 }
+            }
+        }
+        
+        // Check if near entrance and crowded - move away quickly
+        const entranceDistance = Math.sqrt(
+            Math.pow(this.x - entrance.getCenterX(), 2) + 
+            Math.pow(this.y - entrance.getCenterY(), 2)
+        );
+        const nearbyCustomers = customers.filter(c => {
+            if (c === this) return false;
+            const dx = c.x - entrance.getCenterX();
+            const dy = c.y - entrance.getCenterY();
+            return Math.sqrt(dx * dx + dy * dy) < 100;
+        }).length;
+        
+        // If near entrance and crowded (3+ customers nearby), move away quickly
+        if (entranceDistance < 100 && nearbyCustomers >= 3) {
+            const awayX = this.x - entrance.getCenterX();
+            const awayY = this.y - entrance.getCenterY();
+            const awayDist = Math.sqrt(awayX * awayX + awayY * awayY);
+            if (awayDist > 0) {
+                this.vx = (awayX / awayDist) * CONFIG.baseSpeed * 2;
+                this.vy = (awayY / awayDist) * CONFIG.baseSpeed * 2;
             }
         }
         
@@ -365,6 +421,22 @@ class Customer {
         return (dx * dx + dy * dy) < (this.radius * this.radius);
     }
     
+    collidesWithEntrance() {
+        const entranceLeft = entrance.x;
+        const entranceRight = entrance.x + entrance.width;
+        const entranceTop = entrance.y;
+        const entranceBottom = entrance.y + entrance.height;
+        
+        // Find closest point on entrance to customer center
+        const closestX = Math.max(entranceLeft, Math.min(this.x, entranceRight));
+        const closestY = Math.max(entranceTop, Math.min(this.y, entranceBottom));
+        
+        const dx = this.x - closestX;
+        const dy = this.y - closestY;
+        
+        return (dx * dx + dy * dy) < (this.radius * this.radius);
+    }
+    
     collidesWith(other) {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
@@ -464,6 +536,9 @@ function draw() {
     // Clear canvas
     ctx.fillStyle = '#E8F4F8';
     ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+    
+    // Draw entrance
+    entrance.draw();
     
     // Draw exit
     exit.draw();
