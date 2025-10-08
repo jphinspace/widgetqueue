@@ -12,12 +12,14 @@ const CONFIG = {
     canvasHeight: 600,
     counterHeight: 60,
     customerRadius: 15,
-    customerCount: 15,
     baseSpeed: 50, // pixels per second
     decisionInterval: 3000, // ms between decisions
     queueSpacing: 35,
     counterWidth: 200,
-    counterY: 40
+    counterY: 40,
+    exitWidth: 100,
+    exitHeight: 40,
+    purchaseTime: 2000 // ms to complete purchase
 };
 
 // Global state
@@ -56,6 +58,37 @@ const widgetCounter = {
     }
 };
 
+// Exit
+const exit = {
+    x: (CONFIG.canvasWidth - CONFIG.exitWidth) / 2,
+    y: CONFIG.canvasHeight - CONFIG.exitHeight,
+    width: CONFIG.exitWidth,
+    height: CONFIG.exitHeight,
+    
+    draw() {
+        ctx.fillStyle = '#228B22';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.strokeStyle = '#006400';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+        
+        // Exit label
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('EXIT', this.x + this.width / 2, this.y + this.height / 2);
+    },
+    
+    getCenterX() {
+        return this.x + this.width / 2;
+    },
+    
+    getCenterY() {
+        return this.y + this.height / 2;
+    }
+};
+
 // Customer class
 class Customer {
     constructor(id) {
@@ -64,12 +97,14 @@ class Customer {
         this.wantsWidget = false;
         this.inQueue = false;
         this.queuePosition = -1;
+        this.hasPurchased = false;
+        this.isLeaving = false;
+        this.purchaseTimer = 0;
+        this.atExit = false;
         
-        // Random position (avoiding counter area)
-        do {
-            this.x = this.radius + Math.random() * (CONFIG.canvasWidth - 2 * this.radius);
-            this.y = this.radius + Math.random() * (CONFIG.canvasHeight - 2 * this.radius);
-        } while (this.collidesWithCounter() || this.collidesWithOthers());
+        // Start just above the exit (entering from the exit)
+        this.x = exit.getCenterX();
+        this.y = exit.y - this.radius - 5; // Just above the exit
         
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
@@ -94,9 +129,28 @@ class Customer {
     }
     
     update(deltaTime) {
-        if (this.inQueue) {
-            // Move towards queue position
+        if (this.isLeaving) {
+            // Move towards exit
+            this.moveTowardsExit(deltaTime);
+        } else if (this.inQueue) {
+            // Move towards queue position or handle purchase
             this.moveToQueuePosition(deltaTime);
+            
+            // Check if at front of queue
+            const queueIndex = customers.filter(c => c.inQueue && c.id < this.id).length;
+            if (queueIndex === 0 && !this.hasPurchased) {
+                // At front of queue, start purchase timer
+                this.purchaseTimer += deltaTime * 1000;
+                if (this.purchaseTimer >= CONFIG.purchaseTime) {
+                    // Purchase complete, start leaving
+                    this.hasPurchased = true;
+                    this.isLeaving = true;
+                    this.inQueue = false;
+                    this.targetX = exit.getCenterX();
+                    this.targetY = exit.getCenterY();
+                    this.updateQueuePositions();
+                }
+            }
         } else if (this.wantsWidget) {
             // Move towards end of queue
             this.moveTowardsQueue(deltaTime);
@@ -141,6 +195,19 @@ class Customer {
             this.y -= this.vy * deltaTime;
             
             // Bounce off counter
+            if (Math.abs(this.vx) > Math.abs(this.vy)) {
+                this.vx = -this.vx;
+            } else {
+                this.vy = -this.vy;
+            }
+        }
+        
+        // Check exit collision
+        if (this.collidesWithExit()) {
+            this.x -= this.vx * deltaTime;
+            this.y -= this.vy * deltaTime;
+            
+            // Bounce off exit
             if (Math.abs(this.vx) > Math.abs(this.vy)) {
                 this.vx = -this.vx;
             } else {
@@ -224,6 +291,27 @@ class Customer {
         }
     }
     
+    moveTowardsExit(deltaTime) {
+        if (this.targetX === null || this.targetY === null) {
+            this.targetX = exit.getCenterX();
+            this.targetY = exit.getCenterY();
+        }
+        
+        const dx = this.targetX - this.x;
+        const dy = this.targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < 15) {
+            // Reached exit, mark for removal
+            this.atExit = true;
+        } else {
+            // Move towards exit
+            const speed = CONFIG.baseSpeed * 1.5;
+            this.x += (dx / distance) * speed * deltaTime;
+            this.y += (dy / distance) * speed * deltaTime;
+        }
+    }
+    
     moveToQueuePosition(deltaTime) {
         // Update queue position based on position in line
         const queueIndex = customers.filter(c => c.inQueue && c.id < this.id).length;
@@ -254,6 +342,22 @@ class Customer {
         // Find closest point on counter to customer center
         const closestX = Math.max(counterLeft, Math.min(this.x, counterRight));
         const closestY = Math.max(counterTop, Math.min(this.y, counterBottom));
+        
+        const dx = this.x - closestX;
+        const dy = this.y - closestY;
+        
+        return (dx * dx + dy * dy) < (this.radius * this.radius);
+    }
+    
+    collidesWithExit() {
+        const exitLeft = exit.x;
+        const exitRight = exit.x + exit.width;
+        const exitTop = exit.y;
+        const exitBottom = exit.y + exit.height;
+        
+        // Find closest point on exit to customer center
+        const closestX = Math.max(exitLeft, Math.min(this.x, exitRight));
+        const closestY = Math.max(exitTop, Math.min(this.y, exitBottom));
         
         const dx = this.x - closestX;
         const dy = this.y - closestY;
@@ -335,9 +439,14 @@ class Customer {
 
 // Initialize simulation
 function init() {
-    for (let i = 0; i < CONFIG.customerCount; i++) {
-        customers.push(new Customer(i));
-    }
+    // Don't spawn any customers initially
+    // Customers will be spawned via button
+}
+
+// Spawn a new customer
+function spawnCustomer() {
+    const id = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 0;
+    customers.push(new Customer(id));
 }
 
 // Update simulation
@@ -345,6 +454,9 @@ function update(deltaTime) {
     for (let customer of customers) {
         customer.update(deltaTime);
     }
+    
+    // Remove customers who reached the exit
+    customers = customers.filter(c => !c.atExit);
 }
 
 // Draw everything
@@ -352,6 +464,9 @@ function draw() {
     // Clear canvas
     ctx.fillStyle = '#E8F4F8';
     ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+    
+    // Draw exit
+    exit.draw();
     
     // Draw widget counter
     widgetCounter.draw();
@@ -405,6 +520,12 @@ function animate(currentTime) {
 speedSlider.addEventListener('input', (e) => {
     simulationSpeed = parseFloat(e.target.value);
     speedValue.textContent = simulationSpeed.toFixed(1) + 'x';
+});
+
+// Spawn customer button handler
+const spawnButton = document.getElementById('spawnButton');
+spawnButton.addEventListener('click', () => {
+    spawnCustomer();
 });
 
 // Start simulation
