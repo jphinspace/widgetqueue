@@ -102,14 +102,17 @@ class Customer {
         this.purchaseTimer = 0;
         this.atExit = false;
         
+        // Random speed multiplier between 0.9x and 1.5x
+        this.speedMultiplier = 0.9 + Math.random() * 0.6; // Random value between 0.9 and 1.5
+        
         // Start just above the exit (entering from the exit)
         this.x = exit.getCenterX();
         this.y = exit.y - this.radius - 5; // Just above the exit
         
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
-        this.vx = Math.cos(angle) * CONFIG.baseSpeed;
-        this.vy = Math.sin(angle) * CONFIG.baseSpeed;
+        this.vx = Math.cos(angle) * CONFIG.baseSpeed * this.speedMultiplier;
+        this.vy = Math.sin(angle) * CONFIG.baseSpeed * this.speedMultiplier;
         
         // Decision timer
         this.decisionTimer = Math.random() * CONFIG.decisionInterval;
@@ -227,8 +230,8 @@ class Customer {
         // Occasionally change direction
         if (Math.random() < 0.01) {
             const angle = Math.random() * Math.PI * 2;
-            this.vx = Math.cos(angle) * CONFIG.baseSpeed;
-            this.vy = Math.sin(angle) * CONFIG.baseSpeed;
+            this.vx = Math.cos(angle) * CONFIG.baseSpeed * this.speedMultiplier;
+            this.vy = Math.sin(angle) * CONFIG.baseSpeed * this.speedMultiplier;
         }
     }
     
@@ -271,7 +274,7 @@ class Customer {
             this.updateQueuePositions();
         } else {
             // Move towards target
-            const speed = CONFIG.baseSpeed * 1.5; // Move faster when heading to queue
+            const speed = CONFIG.baseSpeed * 1.5 * this.speedMultiplier; // Move faster when heading to queue
             this.x += (dx / distance) * speed * deltaTime;
             this.y += (dy / distance) * speed * deltaTime;
             
@@ -306,7 +309,7 @@ class Customer {
             this.atExit = true;
         } else {
             // Move towards exit
-            const speed = CONFIG.baseSpeed * 1.5;
+            const speed = CONFIG.baseSpeed * 1.5 * this.speedMultiplier;
             this.x += (dx / distance) * speed * deltaTime;
             this.y += (dy / distance) * speed * deltaTime;
         }
