@@ -248,6 +248,19 @@ class Customer {
             }
         }
         
+        // Check exit collision - avoid exit to keep path clear
+        if (this.collidesWithExit()) {
+            this.x -= this.vx * deltaTime;
+            this.y -= this.vy * deltaTime;
+            
+            // Bounce off exit
+            if (Math.abs(this.vx) > Math.abs(this.vy)) {
+                this.vx = -this.vx;
+            } else {
+                this.vy = -this.vy;
+            }
+        }
+        
         // Check customer collisions
         for (let other of customers) {
             if (other !== this && !other.inQueue) {
