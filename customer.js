@@ -210,7 +210,7 @@ class Customer {
             const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
             const normalSpeed = CONFIG.baseSpeed * this.speedMultiplier;
             
-            // If speed is significantly different from normal, gradually restore it
+            // If speed is significantly different from normal, instantly restore it
             if (Math.abs(currentSpeed - normalSpeed) > 1) {
                 const ratio = normalSpeed / currentSpeed;
                 this.vx *= ratio;
