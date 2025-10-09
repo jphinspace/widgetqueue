@@ -38,3 +38,15 @@ python3 -m http.server 8080
 - Statistics display showing both queue counts
 - Interactive speed control slider
 - Spawn customer button to add customers on demand
+
+## Code Structure
+
+The simulation is organized into separate files for better maintainability:
+
+- **`config.js`** - Configuration constants and simulation parameters
+- **`entities.js`** - Scene entities (widget counters, exit, entrance)
+- **`customer.js`** - Customer class with agent behavior logic
+- **`simulation.js`** - Main simulation loop and state management
+- **`index.html`** - HTML structure and UI controls
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation on the codebase structure.
