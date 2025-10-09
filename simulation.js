@@ -27,9 +27,11 @@ let simulationSpeed = 1.0;
 let lastTime = 0;
 let customers = [];
 
-// Widget Counter
-const widgetCounter = {
-    x: (CONFIG.canvasWidth - CONFIG.counterWidth) / 2,
+// Widget Counters
+const counterGap = 50; // Gap between the two counters
+const widgetCounter1 = {
+    id: 1,
+    x: (CONFIG.canvasWidth - CONFIG.counterWidth * 2 - counterGap) / 2,
     y: CONFIG.counterY,
     width: CONFIG.counterWidth,
     height: CONFIG.counterHeight,
@@ -46,7 +48,7 @@ const widgetCounter = {
         ctx.font = 'bold 18px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('WIDGET COUNTER', this.x + this.width / 2, this.y + this.height / 2);
+        ctx.fillText('WIDGET COUNTER 1', this.x + this.width / 2, this.y + this.height / 2);
     },
     
     getBottomY() {
@@ -57,6 +59,39 @@ const widgetCounter = {
         return this.x + this.width / 2;
     }
 };
+
+const widgetCounter2 = {
+    id: 2,
+    x: (CONFIG.canvasWidth - CONFIG.counterWidth * 2 - counterGap) / 2 + CONFIG.counterWidth + counterGap,
+    y: CONFIG.counterY,
+    width: CONFIG.counterWidth,
+    height: CONFIG.counterHeight,
+    
+    draw() {
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.strokeStyle = '#654321';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+        
+        // Counter label
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('WIDGET COUNTER 2', this.x + this.width / 2, this.y + this.height / 2);
+    },
+    
+    getBottomY() {
+        return this.y + this.height;
+    },
+    
+    getQueueStartX() {
+        return this.x + this.width / 2;
+    }
+};
+
+const widgetCounters = [widgetCounter1, widgetCounter2];
 
 // Exit
 const exit = {
@@ -102,6 +137,11 @@ class Customer {
         this.isLeaving = false;
         this.purchaseTimer = 0;
         this.atExit = false;
+        this.assignedCounter = null; // Which counter this customer is queuing for (1 or 2)
+        this.hasSwitchedLines = false; // Track if customer has already switched lines
+        
+        // Random speed multiplier between 0.9x and 1.5x
+        this.speedMultiplier = 0.9 + Math.random() * 0.6; // Random value between 0.9 and 1.5
         
         // Start just above the exit (entering from the exit)
         this.x = exit.getCenterX();
@@ -109,8 +149,8 @@ class Customer {
         
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
-        this.vx = Math.cos(angle) * CONFIG.baseSpeed;
-        this.vy = Math.sin(angle) * CONFIG.baseSpeed;
+        this.vx = Math.cos(angle) * CONFIG.baseSpeed * this.speedMultiplier;
+        this.vy = Math.sin(angle) * CONFIG.baseSpeed * this.speedMultiplier;
         
         // Decision timer
         this.decisionTimer = Math.random() * CONFIG.decisionInterval;
@@ -138,7 +178,7 @@ class Customer {
             this.moveToQueuePosition(deltaTime);
             
             // Check if at front of queue
-            const queueIndex = customers.filter(c => c.inQueue && c.queueJoinTime < this.queueJoinTime).length;
+            const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.queueJoinTime < this.queueJoinTime).length;
             if (queueIndex === 0 && !this.hasPurchased) {
                 // At front of queue, start purchase timer
                 this.purchaseTimer += deltaTime * 1000;
@@ -153,6 +193,10 @@ class Customer {
                 }
             }
         } else if (this.wantsWidget) {
+            // Check if should switch lines before joining queue
+            if (!this.hasSwitchedLines && !this.inQueue) {
+                this.considerLineSwitching();
+            }
             // Move towards end of queue
             this.moveTowardsQueue(deltaTime);
         } else {
@@ -218,9 +262,13 @@ class Customer {
         
         // Check customer collisions
         for (let other of customers) {
-            if (other !== this && !other.inQueue) {
+            if (other !== this) {
                 if (this.collidesWith(other)) {
-                    this.resolveCollision(other);
+                    // Only resolve collision if at least one customer is not in queue
+                    // Customers in queue maintain their position via moveToQueuePosition
+                    if (!this.inQueue || !other.inQueue) {
+                        this.resolveCollision(other);
+                    }
                 }
             }
         }
@@ -228,8 +276,8 @@ class Customer {
         // Occasionally change direction
         if (Math.random() < 0.01) {
             const angle = Math.random() * Math.PI * 2;
-            this.vx = Math.cos(angle) * CONFIG.baseSpeed;
-            this.vy = Math.sin(angle) * CONFIG.baseSpeed;
+            this.vx = Math.cos(angle) * CONFIG.baseSpeed * this.speedMultiplier;
+            this.vy = Math.sin(angle) * CONFIG.baseSpeed * this.speedMultiplier;
         }
     }
     
@@ -237,18 +285,72 @@ class Customer {
         // 20% chance to decide to want a widget
         if (!this.wantsWidget && Math.random() < 0.2) {
             this.wantsWidget = true;
+            // Choose the counter with the shorter queue
+            this.chooseCounter();
             // Find end of queue
             this.findQueueTarget();
         }
     }
     
+    chooseCounter() {
+        // Count customers in each queue
+        const queue1Count = customers.filter(c => 
+            (c.inQueue || c.wantsWidget) && c.assignedCounter === 1
+        ).length;
+        const queue2Count = customers.filter(c => 
+            (c.inQueue || c.wantsWidget) && c.assignedCounter === 2
+        ).length;
+        
+        // Choose the shorter queue (or randomly if equal)
+        if (queue1Count < queue2Count) {
+            this.assignedCounter = 1;
+        } else if (queue2Count < queue1Count) {
+            this.assignedCounter = 2;
+        } else {
+            this.assignedCounter = Math.random() < 0.5 ? 1 : 2;
+        }
+    }
+    
+    considerLineSwitching() {
+        // Only switch if not already in queue and haven't switched before
+        if (this.inQueue || this.hasSwitchedLines || !this.assignedCounter) {
+            return;
+        }
+        
+        // Get current queue lengths
+        const currentQueueCount = customers.filter(c => 
+            (c.inQueue || c.wantsWidget) && c.assignedCounter === this.assignedCounter
+        ).length;
+        const otherCounter = this.assignedCounter === 1 ? 2 : 1;
+        const otherQueueCount = customers.filter(c => 
+            (c.inQueue || c.wantsWidget) && c.assignedCounter === otherCounter
+        ).length;
+        
+        // Switch if the other line is obviously shorter (at least 3 people shorter)
+        if (currentQueueCount - otherQueueCount >= 3) {
+            this.assignedCounter = otherCounter;
+            this.hasSwitchedLines = true;
+            // Recalculate target
+            this.findQueueTarget();
+        }
+    }
+    
     findQueueTarget() {
-        // Count how many customers are in queue or going to queue
-        const queueCount = customers.filter(c => c.inQueue || (c.wantsWidget && c !== this)).length;
+        if (!this.assignedCounter) {
+            this.chooseCounter();
+        }
+        
+        // Count how many customers are in queue or going to this specific queue
+        const queueCount = customers.filter(c => 
+            (c.inQueue || (c.wantsWidget && c !== this)) && c.assignedCounter === this.assignedCounter
+        ).length;
+        
+        // Get the counter we're assigned to
+        const counter = this.assignedCounter === 1 ? widgetCounter1 : widgetCounter2;
         
         // Calculate target position at end of queue
-        const queueX = widgetCounter.getQueueStartX();
-        const queueY = widgetCounter.getBottomY() + CONFIG.queueSpacing * (queueCount + 1);
+        const queueX = counter.getQueueStartX();
+        const queueY = counter.getBottomY() + CONFIG.queueSpacing * (queueCount + 1);
         
         this.targetX = queueX;
         this.targetY = queueY;
@@ -273,7 +375,7 @@ class Customer {
             this.updateQueuePositions();
         } else {
             // Move towards target
-            const speed = CONFIG.baseSpeed * 1.5; // Move faster when heading to queue
+            const speed = CONFIG.baseSpeed * 1.5 * this.speedMultiplier; // Move faster when heading to queue
             this.x += (dx / distance) * speed * deltaTime;
             this.y += (dy / distance) * speed * deltaTime;
             
@@ -308,7 +410,7 @@ class Customer {
             this.atExit = true;
         } else {
             // Move towards exit
-            const speed = CONFIG.baseSpeed * 1.5;
+            const speed = CONFIG.baseSpeed * 1.5 * this.speedMultiplier;
             this.x += (dx / distance) * speed * deltaTime;
             this.y += (dy / distance) * speed * deltaTime;
         }
@@ -316,10 +418,18 @@ class Customer {
     
     moveToQueuePosition(deltaTime) {
         // Update queue position based on position in line (by join time, not ID)
-        const queueIndex = customers.filter(c => c.inQueue && c.queueJoinTime < this.queueJoinTime).length;
-        const targetY = widgetCounter.getBottomY() + CONFIG.queueSpacing * (queueIndex + 1);
+        const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.queueJoinTime < this.queueJoinTime).length;
+        const counter = this.assignedCounter === 1 ? widgetCounter1 : widgetCounter2;
+        const targetX = counter.getQueueStartX();
+        const targetY = counter.getBottomY() + CONFIG.queueSpacing * (queueIndex + 1);
         
-        // Smoothly move to correct position in queue
+        // Smoothly move to correct position in queue (both X and Y)
+        if (Math.abs(this.x - targetX) > 1) {
+            this.x += (targetX - this.x) * deltaTime * 5;
+        } else {
+            this.x = targetX;
+        }
+        
         if (Math.abs(this.y - targetY) > 1) {
             this.y += (targetY - this.y) * deltaTime * 5;
         } else {
@@ -336,19 +446,25 @@ class Customer {
     }
     
     collidesWithCounter() {
-        const counterLeft = widgetCounter.x;
-        const counterRight = widgetCounter.x + widgetCounter.width;
-        const counterTop = widgetCounter.y;
-        const counterBottom = widgetCounter.y + widgetCounter.height;
-        
-        // Find closest point on counter to customer center
-        const closestX = Math.max(counterLeft, Math.min(this.x, counterRight));
-        const closestY = Math.max(counterTop, Math.min(this.y, counterBottom));
-        
-        const dx = this.x - closestX;
-        const dy = this.y - closestY;
-        
-        return (dx * dx + dy * dy) < (this.radius * this.radius);
+        // Check collision with both counters
+        for (let counter of widgetCounters) {
+            const counterLeft = counter.x;
+            const counterRight = counter.x + counter.width;
+            const counterTop = counter.y;
+            const counterBottom = counter.y + counter.height;
+            
+            // Find closest point on counter to customer center
+            const closestX = Math.max(counterLeft, Math.min(this.x, counterRight));
+            const closestY = Math.max(counterTop, Math.min(this.y, counterBottom));
+            
+            const dx = this.x - closestX;
+            const dy = this.y - closestY;
+            
+            if ((dx * dx + dy * dy) < (this.radius * this.radius)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     collidesWithExit() {
@@ -470,24 +586,39 @@ function draw() {
     // Draw exit
     exit.draw();
     
-    // Draw widget counter
-    widgetCounter.draw();
+    // Draw both widget counters
+    widgetCounter1.draw();
+    widgetCounter2.draw();
     
     // Draw customers
     for (let customer of customers) {
         customer.draw();
     }
     
-    // Draw queue lines
-    const queuedCustomers = customers.filter(c => c.inQueue);
-    if (queuedCustomers.length > 0) {
+    // Draw queue lines for both counters
+    const queue1Customers = customers.filter(c => c.inQueue && c.assignedCounter === 1);
+    const queue2Customers = customers.filter(c => c.inQueue && c.assignedCounter === 2);
+    
+    if (queue1Customers.length > 0) {
         ctx.strokeStyle = '#999';
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
-        ctx.moveTo(widgetCounter.getQueueStartX(), widgetCounter.getBottomY());
-        ctx.lineTo(widgetCounter.getQueueStartX(), 
-                   widgetCounter.getBottomY() + CONFIG.queueSpacing * queuedCustomers.length);
+        ctx.moveTo(widgetCounter1.getQueueStartX(), widgetCounter1.getBottomY());
+        ctx.lineTo(widgetCounter1.getQueueStartX(), 
+                   widgetCounter1.getBottomY() + CONFIG.queueSpacing * queue1Customers.length);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    
+    if (queue2Customers.length > 0) {
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(widgetCounter2.getQueueStartX(), widgetCounter2.getBottomY());
+        ctx.lineTo(widgetCounter2.getQueueStartX(), 
+                   widgetCounter2.getBottomY() + CONFIG.queueSpacing * queue2Customers.length);
         ctx.stroke();
         ctx.setLineDash([]);
     }
@@ -497,8 +628,9 @@ function draw() {
     ctx.font = '14px Arial';
     ctx.textAlign = 'left';
     ctx.fillText(`Customers: ${customers.length}`, 10, 20);
-    ctx.fillText(`In Queue: ${queuedCustomers.length}`, 10, 40);
-    ctx.fillText(`Wanting Widget: ${customers.filter(c => c.wantsWidget && !c.inQueue).length}`, 10, 60);
+    ctx.fillText(`Queue 1: ${queue1Customers.length}`, 10, 40);
+    ctx.fillText(`Queue 2: ${queue2Customers.length}`, 10, 60);
+    ctx.fillText(`Wanting Widget: ${customers.filter(c => c.wantsWidget && !c.inQueue).length}`, 10, 80);
 }
 
 // Animation loop

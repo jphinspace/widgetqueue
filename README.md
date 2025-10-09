@@ -2,10 +2,13 @@
 Customers form lines to buy widgets
 
 ## About
-This is an HTML5 canvas simulation featuring agent-based modeling where customers (represented as colored circles) randomly walk around a room until they decide they want to purchase a widget. When a customer wants a widget, they navigate to the widget counter at the top of the room and join the queue. The simulation includes:
+This is an HTML5 canvas simulation featuring agent-based modeling where customers (represented as colored circles) randomly walk around a room until they decide they want to purchase a widget. When a customer wants a widget, they navigate to one of two widget counters at the top of the room and join the queue. The simulation includes:
 
 - **Frame-independent movement** - Smooth animation that runs consistently regardless of frame rate
-- **Collision detection** - Customers cannot walk through each other or the widget counter
+- **Collision detection** - Customers cannot walk through each other or the widget counters
+- **Dual queue system** - Two widget counters with separate queues
+- **Intelligent queue selection** - Customers choose the shorter line when deciding to purchase
+- **Line switching** - Customers can switch to the other line once if it becomes obviously shorter (3+ people difference)
 - **Queue formation** - Customers automatically find and join the end of the line
 - **Adjustable speed** - Use the slider to control simulation speed from 0.1x to 3.0x
 
@@ -26,9 +29,12 @@ python3 -m http.server 8080
 
 ## Features
 
-- 15 autonomous customer agents with random walking behavior
-- Widget counter positioned at the top of the room
+- Autonomous customer agents with random walking behavior
+- Two widget counters positioned at the top of the room
 - Real-time collision detection and physics
+- Intelligent queue selection based on line length
+- Line-switching behavior (customers can switch once to a shorter line)
 - Visual indicators showing customer state (wanting widget vs. in queue)
-- Statistics display showing customer counts
+- Statistics display showing both queue counts
 - Interactive speed control slider
+- Spawn customer button to add customers on demand
