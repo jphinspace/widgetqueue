@@ -23,10 +23,15 @@ class Customer {
         this.x = entrance.getCenterX();
         this.y = entrance.y - this.radius - 5; // Just above the entrance
         
-        // Random velocity
+        // Random velocity - but initially move away from entrance
         const angle = Math.random() * Math.PI * 2;
         this.vx = Math.cos(angle) * CONFIG.baseSpeed * this.speedMultiplier;
         this.vy = Math.sin(angle) * CONFIG.baseSpeed * this.speedMultiplier;
+        
+        // Ensure initial upward movement away from entrance
+        if (this.vy > -CONFIG.baseSpeed * 0.3) {
+            this.vy = -CONFIG.baseSpeed * this.speedMultiplier;
+        }
         
         // Decision timer
         this.decisionTimer = Math.random() * CONFIG.decisionInterval;
@@ -111,41 +116,52 @@ class Customer {
         }
         
         // Check counter collision
-        if (this.collidesWithCounter()) {
-            this.x -= this.vx * deltaTime;
-            this.y -= this.vy * deltaTime;
-            
-            // Bounce off counter
-            if (Math.abs(this.vx) > Math.abs(this.vy)) {
-                this.vx = -this.vx;
-            } else {
-                this.vy = -this.vy;
+        const counterCollision = this.collidesWithCounter();
+        if (counterCollision.collision) {
+            // Push away from counter based on collision normal
+            const dist = Math.sqrt(counterCollision.dx * counterCollision.dx + counterCollision.dy * counterCollision.dy);
+            if (dist > 0) {
+                const pushDistance = this.radius - dist;
+                this.x += (counterCollision.dx / dist) * pushDistance;
+                this.y += (counterCollision.dy / dist) * pushDistance;
             }
-        }
-        
-        // Check entrance collision
-        if (this.collidesWithEntrance()) {
-            this.x -= this.vx * deltaTime;
-            this.y -= this.vy * deltaTime;
             
-            // Bounce off entrance
-            if (Math.abs(this.vx) > Math.abs(this.vy)) {
-                this.vx = -this.vx;
-            } else {
-                this.vy = -this.vy;
+            // Reflect velocity away from counter
+            const dotProduct = this.vx * counterCollision.dx + this.vy * counterCollision.dy;
+            if (dotProduct < 0) {
+                const dist = Math.sqrt(counterCollision.dx * counterCollision.dx + counterCollision.dy * counterCollision.dy);
+                if (dist > 0) {
+                    const normalX = counterCollision.dx / dist;
+                    const normalY = counterCollision.dy / dist;
+                    const factor = 2 * dotProduct;
+                    this.vx -= factor * normalX;
+                    this.vy -= factor * normalY;
+                }
             }
         }
         
         // Check exit collision - avoid exit to keep path clear
-        if (this.collidesWithExit()) {
-            this.x -= this.vx * deltaTime;
-            this.y -= this.vy * deltaTime;
+        const exitCollision = this.collidesWithExit();
+        if (exitCollision.collision) {
+            // Push away from exit
+            const dist = Math.sqrt(exitCollision.dx * exitCollision.dx + exitCollision.dy * exitCollision.dy);
+            if (dist > 0) {
+                const pushDistance = this.radius - dist;
+                this.x += (exitCollision.dx / dist) * pushDistance;
+                this.y += (exitCollision.dy / dist) * pushDistance;
+            }
             
-            // Bounce off exit
-            if (Math.abs(this.vx) > Math.abs(this.vy)) {
-                this.vx = -this.vx;
-            } else {
-                this.vy = -this.vy;
+            // Reflect velocity away from exit
+            const dotProduct = this.vx * exitCollision.dx + this.vy * exitCollision.dy;
+            if (dotProduct < 0) {
+                const dist = Math.sqrt(exitCollision.dx * exitCollision.dx + exitCollision.dy * exitCollision.dy);
+                if (dist > 0) {
+                    const normalX = exitCollision.dx / dist;
+                    const normalY = exitCollision.dy / dist;
+                    const factor = 2 * dotProduct;
+                    this.vx -= factor * normalX;
+                    this.vy -= factor * normalY;
+                }
             }
         }
         
@@ -373,10 +389,10 @@ class Customer {
             const dy = this.y - closestY;
             
             if ((dx * dx + dy * dy) < (this.radius * this.radius)) {
-                return true;
+                return { collision: true, closestX, closestY, dx, dy };
             }
         }
-        return false;
+        return { collision: false };
     }
     
     collidesWithExit() {
@@ -392,7 +408,11 @@ class Customer {
         const dx = this.x - closestX;
         const dy = this.y - closestY;
         
-        return (dx * dx + dy * dy) < (this.radius * this.radius);
+        const distSq = dx * dx + dy * dy;
+        if (distSq < (this.radius * this.radius)) {
+            return { collision: true, dx, dy };
+        }
+        return { collision: false };
     }
     
     collidesWithEntrance() {
@@ -415,7 +435,13 @@ class Customer {
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance < (this.radius + other.radius);
+        
+        // Add personal space buffer when not in queue
+        // When both customers are not in queue, require more space
+        const bothNotInQueue = !this.inQueue && !other.inQueue;
+        const personalSpaceBuffer = bothNotInQueue ? this.radius * 0.5 : 0;
+        
+        return distance < (this.radius + other.radius + personalSpaceBuffer);
     }
     
     collidesWithOthers() {
@@ -434,8 +460,12 @@ class Customer {
         
         if (distance === 0) return;
         
+        // Add personal space buffer when not in queue
+        const bothNotInQueue = !this.inQueue && !other.inQueue;
+        const personalSpaceBuffer = bothNotInQueue ? this.radius * 0.5 : 0;
+        
         // Push apart
-        const overlap = (this.radius + other.radius) - distance;
+        const overlap = (this.radius + other.radius + personalSpaceBuffer) - distance;
         const pushX = (dx / distance) * overlap * 0.5;
         const pushY = (dy / distance) * overlap * 0.5;
         
