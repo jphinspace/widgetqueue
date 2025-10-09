@@ -93,8 +93,8 @@ const exit = {
 
 // Entrance
 const entrance = {
-    x: (CONFIG.canvasWidth - CONFIG.entranceWidth) / 2,
-    y: 0,
+    x: (CONFIG.canvasWidth - CONFIG.entranceWidth) / 2 - CONFIG.entranceWidth - 20,
+    y: CONFIG.canvasHeight - CONFIG.entranceHeight,
     width: CONFIG.entranceWidth,
     height: CONFIG.entranceHeight,
     
@@ -135,9 +135,9 @@ class Customer {
         this.purchaseTimer = 0;
         this.atExit = false;
         
-        // Start just below the entrance (entering from the entrance)
+        // Start just above the entrance (entering from the entrance at bottom)
         this.x = entrance.getCenterX();
-        this.y = entrance.y + entrance.height + this.radius + 5; // Just below the entrance
+        this.y = entrance.y - this.radius - 5; // Just above the entrance
         
         // Random velocity
         const angle = Math.random() * Math.PI * 2;
