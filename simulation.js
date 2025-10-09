@@ -165,6 +165,7 @@ class Customer {
         this.wantsWidget = false;
         this.inQueue = false;
         this.queuePosition = -1;
+        this.queueJoinTime = null;
         this.hasPurchased = false;
         this.isLeaving = false;
         this.purchaseTimer = 0;
@@ -210,7 +211,7 @@ class Customer {
             this.moveToQueuePosition(deltaTime);
             
             // Check if at front of queue
-            const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.id < this.id).length;
+            const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.queueJoinTime < this.queueJoinTime).length;
             if (queueIndex === 0 && !this.hasPurchased) {
                 // At front of queue, start purchase timer
                 this.purchaseTimer += deltaTime * 1000;
@@ -307,9 +308,13 @@ class Customer {
         
         // Check customer collisions
         for (let other of customers) {
-            if (other !== this && !other.inQueue) {
+            if (other !== this) {
                 if (this.collidesWith(other)) {
-                    this.resolveCollision(other);
+                    // Only resolve collision if at least one customer is not in queue
+                    // Customers in queue maintain their position via moveToQueuePosition
+                    if (!this.inQueue || !other.inQueue) {
+                        this.resolveCollision(other);
+                    }
                 }
             }
         }
@@ -433,6 +438,7 @@ class Customer {
         if (distance < 5) {
             // Reached queue position
             this.inQueue = true;
+            this.queueJoinTime = performance.now(); // Track when customer joined queue
             this.x = this.targetX;
             this.y = this.targetY;
             this.updateQueuePositions();
@@ -480,12 +486,19 @@ class Customer {
     }
     
     moveToQueuePosition(deltaTime) {
-        // Update queue position based on position in line
-        const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.id < this.id).length;
+        // Update queue position based on position in line (by join time, not ID)
+        const queueIndex = customers.filter(c => c.inQueue && c.assignedCounter === this.assignedCounter && c.queueJoinTime < this.queueJoinTime).length;
         const counter = this.assignedCounter === 1 ? widgetCounter1 : widgetCounter2;
+        const targetX = counter.getQueueStartX();
         const targetY = counter.getBottomY() + CONFIG.queueSpacing * (queueIndex + 1);
         
-        // Smoothly move to correct position in queue
+        // Smoothly move to correct position in queue (both X and Y)
+        if (Math.abs(this.x - targetX) > 1) {
+            this.x += (targetX - this.x) * deltaTime * 5;
+        } else {
+            this.x = targetX;
+        }
+        
         if (Math.abs(this.y - targetY) > 1) {
             this.y += (targetY - this.y) * deltaTime * 5;
         } else {
