@@ -165,7 +165,8 @@ class Customer {
             }
         }
         
-        // Check customer collisions
+        // Check customer collisions and track if any collision occurred
+        let hasCollision = false;
         for (let other of customers) {
             if (other !== this) {
                 if (this.collidesWith(other)) {
@@ -173,6 +174,7 @@ class Customer {
                     // Customers in queue maintain their position via moveToQueuePosition
                     if (!this.inQueue || !other.inQueue) {
                         this.resolveCollision(other);
+                        hasCollision = true;
                     }
                 }
             }
@@ -190,14 +192,29 @@ class Customer {
             return Math.sqrt(dx * dx + dy * dy) < 100;
         }).length;
         
+        // Track whether we're actively avoiding entrance
+        const isAvoidingEntrance = entranceDistance < 100 && nearbyCustomers >= 3;
+        
         // If near entrance and crowded (3+ customers nearby), move away quickly
-        if (entranceDistance < 100 && nearbyCustomers >= 3) {
+        if (isAvoidingEntrance) {
             const awayX = this.x - entrance.getCenterX();
             const awayY = this.y - entrance.getCenterY();
             const awayDist = Math.sqrt(awayX * awayX + awayY * awayY);
             if (awayDist > 0) {
                 this.vx = (awayX / awayDist) * CONFIG.baseSpeed * 2;
                 this.vy = (awayY / awayDist) * CONFIG.baseSpeed * 2;
+            }
+        } else if (!hasCollision) {
+            // If not avoiding entrance and not colliding, restore normal velocity
+            // Get current velocity magnitude
+            const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+            const normalSpeed = CONFIG.baseSpeed * this.speedMultiplier;
+            
+            // If speed is significantly different from normal, instantly restore it
+            if (Math.abs(currentSpeed - normalSpeed) > 1) {
+                const ratio = normalSpeed / currentSpeed;
+                this.vx *= ratio;
+                this.vy *= ratio;
             }
         }
         
