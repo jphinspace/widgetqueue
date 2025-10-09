@@ -358,6 +358,28 @@ class Customer {
             const speed = CONFIG.baseSpeed * 1.5 * this.speedMultiplier;
             this.x += (dx / distance) * speed * deltaTime;
             this.y += (dy / distance) * speed * deltaTime;
+            
+            // Avoid collisions with other customers while leaving
+            // This ensures leaving customers respect personal boundaries
+            for (let other of customers) {
+                if (other !== this && this.collidesWith(other)) {
+                    // Push away to maintain personal space
+                    const avoidX = this.x - other.x;
+                    const avoidY = this.y - other.y;
+                    const avoidDist = Math.sqrt(avoidX * avoidX + avoidY * avoidY);
+                    if (avoidDist > 0) {
+                        // Calculate required separation distance
+                        const bothLeaving = other.isLeaving;
+                        const personalSpaceBuffer = bothLeaving ? this.radius * 0.5 : this.radius * 0.3;
+                        const requiredDist = this.radius + other.radius + personalSpaceBuffer;
+                        const pushDistance = requiredDist - avoidDist;
+                        
+                        // Push away from the other customer
+                        this.x += (avoidX / avoidDist) * pushDistance * 0.5;
+                        this.y += (avoidY / avoidDist) * pushDistance * 0.5;
+                    }
+                }
+            }
         }
     }
     
